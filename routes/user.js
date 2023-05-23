@@ -1,52 +1,61 @@
 const router = require('express').Router()
 const otp = require('../model/otp')
-const user = require('../model/user')
+const loginWithPhone = require('../model/loginWithPhone')
 const sendSMSFunction = require('../helper/smsApi')
+const jwt = require('jsonwebtoken')
+const cookie = require('cookie')
 
 // generate random otp and send otp to user and store in DB
-router.post('/send-otp', async (req, res) => {
+router.post('/send-otp', (req, res) => {
     const phoneNumber = "91" + req.body.phone
+    // check if phone number is already exist
+    loginWithPhone.find({ phone: phoneNumber }).then(async (resp) => {
+        // find metod return array with phone number if phone number exist otherwise empty array
+        if (resp.length === 1) {
+            res.status(200).json({ 'msg': 'phone number already exist', isPhoneExit: true })
+        }
+        else {
+            // generate random 4 digit otp
+            const generatedOtp = Math.floor(Math.random() * 10000)
 
-    // Generate a 4-digit OTP
-    const generatedOtp = Math.floor(Math.random() * 10000)
-
-    // await sendSMSFunction(phoneNumber, generatedOtp)
-    const newOtp = new otp({ number: generatedOtp })
-    newOtp.save()
-        .then(response => res.status(200).json({ msg: 'otp generated', success: true }))
-        .catch(err => res.status(400).json({ 'error': true, 'msg': err.message }))
+            // await sendSMSFunction(phoneNumber, generatedOtp)
+            const newOtp = new otp({ number: generatedOtp })
+            newOtp.save()
+                .then(response => res.status(200).json({ msg: 'otp generated', success: true }))
+                .catch(err => res.status(400).json({ 'error': true, 'msg': err.message }))
+        }
+    })
 })
 
 // verify user entered otp with database otp
-// after verify delete from DB
+// after verify delete otp from DB
 router.post('/verify-otp', (req, res) => {
     const userEnteredOtp = req.body.userEnteredOtp
-    const phoneNumber = req.body.phone
+    const phoneNumber = '91' + req.body.phone
 
-    // send user info to UI
-    // redirected to home page with user profile
     otp.findOne({ number: userEnteredOtp })
-        .then(response => {
-            if (response) {
-                // otp verified, store new user to DB
-                const newUser = new user({name: '44sdfsdfsd4s44',phone: phoneNumber,email : 'sdfsdfsdf'})
-                newUser.save()
-                .then((err, user)=> {
-                    const respObj = {'success': true, 'user': user}
-                    res.status(200).json(JSON.stringify(respObj))
-                    // after verify delete otp
-                    otp.deleteOne({number: userEnteredOtp})
-                    .then(()=>console.log('otp deleted'))
-                    .catch(()=>console.log('otp delete error'))
-                })
-                .catch(err=> console.log(err))
+        .then(async (otp) => {
+            // if opt entered is wrong
+            if (otp == null) {
+                res.json({ error: true, 'msg': 'invalid otp' })
             }
-            if (response === null) {
-                res.status(200).json({ 'error': true })
+            // otp verified
+            else {
+                const newPhone = new loginWithPhone({ phone: phoneNumber })
+                await newPhone.save()
+
+                // create jwt token and send to front-end
+                const token = jwt.sign({ phone: phoneNumber }, process.env.JWT_SECRET)
+
+                // after verify delete otp
+                otp.deleteOne({ number: userEnteredOtp })
+                    .then(() => console.log('otp deleted'))
+                    .catch(() => console.log('otp delete error'))
+
+                res.json({ success: true, 'msg': 'otp verified', token: token })
             }
         })
-        .catch(err => res.status(200).json({ 'error': true }))
+        .catch(err => console.log(err))
 })
-
 
 module.exports = router
