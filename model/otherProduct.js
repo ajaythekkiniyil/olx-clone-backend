@@ -3,24 +3,18 @@ const mongoose = require('mongoose')
 const otherPrductSchema = mongoose.Schema({
     title: {
         type: String,
-        required: true,
-        unique: true,
     },
     description: {
         type: String,
     },
     price: {
         type: Number,
-        required: true,
     },
     category: {
         type: String,
-        required: true,
     },
     sellerId: {
-        type: Number,
-        required: true,
-        unique: true,
+        type: String,
     },
     datePosted: {
         type: Date,
@@ -30,7 +24,6 @@ const otherPrductSchema = mongoose.Schema({
     },
     location:{
         type: String,
-        required: true,
     }
 })
 

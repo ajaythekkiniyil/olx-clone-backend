@@ -1,7 +1,9 @@
 const user = require('../model/user')
 
 const sendSms = async (phone) => {
-  const otp = Math.floor(Math.random() * 10000)
+  const min = 1000; 
+  const max = 9999; 
+  const otp = Math.floor(Math.random() * (max - min + 1)) + min;
 
   const newUser = new user(
     {

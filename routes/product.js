@@ -1,85 +1,83 @@
 const express = require('express')
 const router = express.Router()
 const car = require('../model/car')
+const otherProduct = require('../model/otherProduct')
 const { verifyJwt } = require('../helper/authenticate')
-
-require('dotenv').config()
-
-const folderName = process.env.CLOUDINARY_FOLDER
-const multer = require('multer');
-const cloudinary = require('cloudinary').v2
-
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-})
-const storage = multer.memoryStorage()
-const upload = multer({ storage })
+const { upload, uploadFile } = require('../helper/fileupload')
 
 router.post('/add-car', verifyJwt, upload.array('image'), async (req, res) => {
+    const postInfo = JSON.parse(req.body.postInfo)
     const userId = req.user.userId
-    try {
-        const { files } = req
+    const { files } = req
 
-        if (files.length === 0) {
-            return res.status(400).json({ status: false, message: 'No files were uploaded.' });
-        }
+    if (files.length !== 0) {
+        // function to upload
+        uploadFile(files)
+            .then(async (imageUrlsArray) => {
 
-        const uploadPromises = files.map((file) => {
-            return new Promise((resolve, reject) => {
-                cloudinary.uploader.upload_stream(
-                    { resource_type: 'auto', folder: folderName },
-                    (error, result) => {
-                        if (error) {
-                            console.error('Error uploading buffer to Cloudinary:', error);
-                            reject(error);
-                        } else {
-                            resolve(result.secure_url);
+                if (postInfo.category === 'car') {
+                    const newcar = new car(
+                        {
+                            "sellerId": userId,
+                            "brand": postInfo.brand,                          // String
+                            "year": postInfo.year,                            // Number
+                            "fuel": postInfo.fuel,                            // String
+                            "kilometerDriven": postInfo.kilometerDriven,      // Number
+                            "owner": postInfo.owner,                          // Number
+                            "title": postInfo.title,                          // String
+                            "description": postInfo.description,              // String
+                            "price": postInfo.price,                          // Number
+                            "category": postInfo.category,                    // String
+                            "datePosted": new Date(),                         // Date
+                            "image": imageUrlsArray,                          // Array
+                            "location": postInfo.location,                    // String
                         }
+                    )
+                    const savedcar = await newcar.save()
+                    if (savedcar) {
+                        res.send({ status: true, message: 'Successfully saved new post' })
                     }
-                ).end(file.buffer);
-            });
-        });
+                    res.send({ status: false, message: 'something went to wrong on saving' })
 
-        Promise.all(uploadPromises)
-            .then(async(uploadedImages) => {
-                const newcar = new car(
-                    {
+                }
+                else {
+                    const newProduct = new otherProduct({
                         "sellerId": userId,
-                        "brand": req.body.brand,                          // String
-                        "year": req.body.year,                            // Number
-                        "fuel": req.body.fuel,                            // String
-                        "kilometerDriven": req.body.kilometerDriven,      // Number
-                        "owner": req.body.owner,                          // Number
-                        "title": req.body.title,                          // String
-                        "description": req.body.description,              // String
-                        "price": req.body.price,                          // Number
-                        "category": req.body.category,                    // String
-                        "datePosted": new Date(),                         // Date
-                        "image": uploadedImages,                          // Array
-                        "location": req.body.location,                    // String
+                        "title": postInfo.title,
+                        "description": postInfo.description,
+                        "price": postInfo.price,
+                        "category": postInfo.category,
+                        "datePosted": new Date(),
+                        "image": imageUrlsArray,
+                        "location": postInfo.location,
+                    })
+                    const savedProduct = await newProduct.save()
+                    if (savedProduct) {
+                        return res.send({ status: true, message: 'Successfully saved new post' })
                     }
-                )
-                const savedcar = await newcar.save()
-                res.send({ status: true, message: 'Successfully saved new car' })
+                    return res.send({ status: false, message: 'something went to wrong on saving' })
+                }
             })
-            .catch((error) => {
-                console.error('Error uploading one or more files:', error);
-                res.status(500).json({ status: false, message: 'Error uploading files.' });
-            });
+            .catch(err => {
+                res.status(500).json({ status: false, message: err });
+            })
 
+        return
     }
-    catch (err) {
-        console.error('Error uploading one or more files:', error);
-        res.status(500).json({ status: false, message: 'Error uploading files.' });
-    }
+    res.status(500).json({ status: false, message: 'check all fields are filled' });
 })
 
-router.get('/get-all-products',verifyJwt, async (req, res) => {
+router.get('/get-all-products', async (req, res) => {
     try {
-        const totalCount = await car.count()
-        const allProducts = await car.find({})
+        const totalCars = await car.count()
+        const totalOtherProducts = await otherProduct.count()
+        
+        const allCar = await car.find({})
+        const allOtherProduct = await otherProduct.find({})
+        
+        const totalCount = totalCars + totalOtherProducts
+        const allProducts = [...allCar, ...allOtherProduct]
+
         const productObject = { 'totalCount': totalCount, 'allProducts': allProducts }
         res.status(200).json(productObject)
     }
